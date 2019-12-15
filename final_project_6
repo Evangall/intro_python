@@ -1,0 +1,528 @@
+'''
+This script launches a small application that allows the user to check live NBA scores for an individual team or for all teams currently playing.
+
+Required packages: PySimpleGUI, which can be found here: https://pysimplegui.readthedocs.io/en/latest/ 
+
+Pre-exam topics: Basically all of them, but 3 examples are:
+    1) Extensive use of for and while loops, plus if/elif/else statements within the loops
+    2) Lists and dictionaries are each used quite a bit, both because of API output formatting and because 
+    they simplify certain tasks (e.g. specifying valid team names)
+    3) Datetime objects are used and manipulated to give useful information about game start times
+    
+Post-exam topics: Here, I had to get a bit more creative, because a lot of the data analysis and data management topics we 
+discussed were simply not relevant to the problem I was trying to solve. 
+    1) All live data is collected via the following API: https://rapidapi.com/api-sports/api/api-nba 
+    2) The GUI (obviously not covered in class but still post-exam)
+    3) The conversion of the python program into an executable. Again, not covered in class, but for an application
+    of this sort it is extremely desireable to be able to launch the program without opening the IDE and clicking 'run'.
+    It also reduces the prevalence of glitches (e.g. output text appearing in the console rather than the GUI).
+'''
+
+import PySimpleGUI as sg
+
+# This first section specifies the look and feel of the GUI. It also defines what UI elements to include and where to put them. 
+
+sg.change_look_and_feel('Reddit')
+layout = [  [sg.Text(' ')],
+            [sg.Text('The NBA Score Checker')],
+            [sg.Text('By Evan Gallagher')],
+            [sg.Text(' ')],
+            [sg.Text('Select your team:  '),
+             sg.Combo([' ATL ', ' BKN ', ' BOS ', ' CHA ', ' CHI ',
+                       ' CLE ', ' DAL ', ' DEN ', ' DET ', ' GSW ',
+                       ' HOU ', ' IND ', ' LAC ', ' LAL ', ' MEM ', 
+                       ' MIA ', ' MIL ', ' MIN ', ' NOP ', ' NYK ',
+                       ' OKC ', ' ORL ', ' PHI ', ' PHX ', ' POR ', 
+                       ' SAC ', ' SAS ', ' TOR ', ' UTA ', ' WAS '])],
+            [sg.Button(' Check Team Stress Level '),
+             sg.Button(' Check Team Score '),
+             sg.Button(' Check All Current Scores ')],   
+            [sg.Output(size=(100, 20))],
+            [sg.Text('')]]
+            
+# This is the list of valid NBA teams. If the program gets an input that isn't one of these, it rejects the input. 
+
+list_of_teams = ['ATL', 'BKN', 'BOS', 'CHA', 'CHI',
+                 'CLE', 'DAL', 'DEN', 'DET', 'GSW',
+                 'HOU', 'IND', 'LAC', 'LAL', 'MEM', 
+                 'MIA', 'MIL', 'MIN', 'NOP', 'NYK',
+                 'OKC', 'ORL', 'PHI', 'PHX', 'POR', 
+                 'SAC', 'SAS', 'TOR', 'UTA', 'WAS']
+
+#################################
+###  PART 1: CHECK ALL SCORES ###
+#################################
+
+def check_all_games():
+    '''
+    This function runs when the user clicks "Check all current scores"
+    It doesn't take any inputs because the outputs are always the same.
+    There are 4 types of outputs:
+        1) A list of games that haven't started yet, plus their start times
+        2) A list of games that have started, plus the scores and time remaining for each
+        3) A list of games that have finished, plus final scores
+        4) If there are no games, it just tells you that. 
+    '''
+    
+    import requests
+    from datetime import timedelta, date, datetime
+    
+    # The following chunk is the API request, plus some formatting of the output
+    
+    url_games_today_base = 'https://api-nba-v1.p.rapidapi.com/games/date/' 
+    today_date = str(date.today() + timedelta(days=1)) 
+    url_games_today_final = url_games_today_base + today_date
+    
+    payload = {
+            "x-rapidapi-host": "api-nba-v1.p.rapidapi.com",
+            "rapidapi-key": "4e0ba67f1emsh67d0ebd47ceafb2p1643e7jsn81ecf355fbda"
+            }
+    
+    t = requests.get(url_games_today_final, params=payload)
+    raw_today = t.json()['api']
+    today_games = raw_today['games']
+    
+    ### If there are no games...
+    
+    if len(today_games)==0:
+        print("""
+    ---
+    There aren't any NBA games today :(
+    ---""")
+    
+    ### Upcoming Games
+    
+    print(" ") # Spacer
+    
+    upcoming_games = False
+    for game in today_games:
+        if game['statusGame'] == "Scheduled": # This is how the script knows the game hasn't started yet
+            upcoming_games = True
+    
+    if upcoming_games == True: # Don't do any of this stuff unless there's at least 1 upcoming game
+        print(f"""    ---
+    Here are all of today's upcoming games:""")
+        
+        for game in today_games: # For all the games today...
+            if game['statusGame'] == "Scheduled": # Pick out the ones that haven't started. Then, for each...
+                home_team = game['hTeam'] # Establish a home team dictionary
+                away_team = game['vTeam'] # And do the same for the away team
+                
+                raw_start_time = game['startTimeUTC'] # Extract the start time, which is not in the right time zone
+                date = raw_start_time[:10]
+                time = raw_start_time[11:16]
+                year, month, day = map(int, date.split('-'))
+                hour, minute = map(int, time.split(':')) 
+                gametime_unconverted = datetime(year, month, day, hour, minute, 0, 0) # Make the start time into a datetime object
+                gametime = (gametime_unconverted + timedelta(hours=7)) # COnvert it to EST
+                    
+                gametime_str = str(gametime) # Then make it into a nice looking string
+                gametime_short = str(gametime_str[11:])
+                
+                # What actually prints the upcoming game information
+                print(f"    {away_team['shortName']} @ {home_team['shortName']}   |   Start Time: {gametime_short} EST")
+            
+    ### Live Games 
+    
+    live_games = False
+    for game in today_games:
+        if game['statusGame'] == "In Play":
+            live_games = True
+    
+    if live_games == True:     
+        print(f"""    ---
+    Here are all of the games that are live right now:""")
+        
+        for game in today_games:
+            if game['statusGame'] == "In Play": # Identify games that are in play
+                home_team = game['hTeam']
+                home_dict = home_team['score'] # Intermediate step that's needed to surmount weird API formatting
+                home_score = home_dict['points'] # Home team score
+                away_team = game['vTeam']
+                away_dict = away_team['score']
+                away_score = away_dict['points'] # Away team score
+                
+                if not game['clock']: # If there is no clock (e.g. during halftime)...
+                    clock = "No Active Clock" # Tell us that
+                else:
+                    clock = game['clock'] # Establish time remaining in the game
+                
+                quarter = game['currentPeriod'] # Establish the quarter
+                
+                # Print what's happening in the game
+                print(f"    {away_team['shortName']} ({away_score}) @ {home_team['shortName']} ({home_score})   |   {clock} - Q {quarter}")
+            
+    ### Completed Games
+    # This section has the exact same structure as the section above. 
+    
+    completed_games = False
+    for game in today_games:
+        if game['statusGame'] == "Finished":
+            completed_games = True
+    
+    if completed_games == True: 
+        print(f"""    ---
+    Here are all of the games that have finished:""")
+            
+        for game in today_games:
+            if game['statusGame'] == "Finished":
+                home_team = game['hTeam']
+                home_dict = home_team['score']
+                home_score = home_dict['points']
+                away_team = game['vTeam']
+                away_dict = away_team['score']
+                away_score = away_dict['points']
+            
+                if home_score > away_score: # Quick check to see who won. Just makes the output nicer. 
+                    print(f"    {home_team['shortName']} def {away_team['shortName']}, {home_score} - {away_score}")
+                else:
+                    print(f"    {away_team['shortName']} def {home_team['shortName']}, {away_score} - {home_score}")
+    
+    print("    ---")
+
+##########################################
+###  PART 2: CHECK A SINGLE TEAM SCORE ###
+##########################################
+
+def check_single_game(team_abbr, show_score):
+    '''
+    This function runs when the user clicks "Check team score" OR "Check team stress level"
+    It takes 2 inputs:
+        1) The team abbreviation, which specifies which team to actually check on
+        2) A boolean specifying whether to display the score or the stress level
+    It returns the following outputs:
+        If the team is not playing that night, it tells you when and where the next game is
+        If the team is playing that night but hasn't started, it tells you where the game is and when it starts
+        If the team is currently playing, it tells you the time remaining and EITHER the score or the stress level
+        If the game is over, it tells you who won, regardless of what button you clicked
+    '''
+    
+    import requests
+    import random as rd
+    from datetime import timedelta, date, datetime
+    
+    # Exact same request as before. Originally, this was a lot more complicated, and it worked a lot worse. Oh well. 
+    
+    url_games_today_base = 'https://api-nba-v1.p.rapidapi.com/games/date/' 
+    today_date = str(date.today() + timedelta(days=1)) 
+    url_games_today_final = url_games_today_base + today_date
+    
+    payload = {
+            "x-rapidapi-host": "api-nba-v1.p.rapidapi.com",
+            "rapidapi-key": "4e0ba67f1emsh67d0ebd47ceafb2p1643e7jsn81ecf355fbda"
+            }
+    
+    t = requests.get(url_games_today_final, params=payload)
+    raw_today = t.json()['api']
+    today_games = raw_today['games']
+
+    # Establish whether there is a game tonight. If yes, save some important game and team information. 
+
+    game_tonight = False
+    home_game = False
+    focus_game = {}
+    focus_team = {}
+    opponent = {}
+    
+    for game in today_games:
+        home_team = game['hTeam']
+        away_team = game['vTeam']
+        if home_team['shortName'] == str(team_abbr):
+            game_tonight = True
+            home_game = True
+            focus_game = game
+            focus_team = home_team
+            opponent = away_team
+        elif away_team['shortName'] == str(team_abbr):
+            game_tonight = True
+            focus_game = game
+            focus_team = away_team
+            opponent = home_team
+    
+    # If there is not a game, find out the next time there will be one
+    
+    if game_tonight == False:
+        print(f"""
+    ---
+    {team_abbr} does not have a game tonight
+    ---""")
+
+        future_game_tonight = False        
+        future_home_game = False
+        future_focus_game = {}
+        future_opponent = {}
+        
+        # Here, we have to send additional GET requests. The more days until the next game, the more requests
+        
+        counter = 2 # This is achieved by successively increasing the timedelta in the get request. Starts at 2 because of weird API formatting
+        
+        while future_game_tonight == False: # "Keep going until you find a game"
+        
+            url_future_games_base = 'https://api-nba-v1.p.rapidapi.com/games/date/' 
+            today_date = str(date.today() + timedelta(days=counter)) # days used to be a number, but here it's a variable that icreases till you find a game. 
+            url_future_games_final = url_future_games_base + today_date
+        
+            payload = {
+                    "x-rapidapi-host": "api-nba-v1.p.rapidapi.com",
+                    "rapidapi-key": "4e0ba67f1emsh67d0ebd47ceafb2p1643e7jsn81ecf355fbda"
+                    }
+        
+            f = requests.get(url_future_games_final, params=payload)
+            raw_future_games = f.json()['api']
+            future_games = raw_future_games['games']
+            
+            for game in future_games: # Look for the selected team in the list of games from current day + counter
+                future_home_team = game['hTeam']
+                future_away_team = game['vTeam']
+                if future_home_team['shortName'] == str(team_abbr):
+                    future_game_tonight = True  
+                    future_home_game = True
+                    future_focus_game = game
+                    future_opponent = future_away_team
+                elif future_away_team['shortName'] == str(team_abbr):
+                    future_game_tonight = True
+                    future_focus_game = game
+                    future_opponent = future_home_team
+                    
+            counter+=1 # If you don't find anything, add 1 to the timedelta and try again
+            
+        if future_home_game == True: # Just a little block to make the print statements more concise
+            future_connector = "vs" # Home games get a [team] vs [opponent]
+        else: 
+            future_connector = "@" # Away games get a [team] @ [opponent]
+            
+        raw_future_start_time = future_focus_game['startTimeUTC']
+        f_date = raw_future_start_time[:10]
+        f_time = raw_future_start_time[11:16]
+        year, month, day = map(int, f_date.split('-'))
+        hour, minute = map(int, f_time.split(':')) 
+        future_gametime_unconverted = datetime(year, month, day, hour, minute, 0, 0)
+        future_gametime = (future_gametime_unconverted + timedelta(hours=7))
+                
+        future_gametime_str = str(future_gametime)
+        future_gametime_short = str(future_gametime_str[11:])
+        
+        weekdays = {
+                0:'Monday', 
+                1:'Tuesday',
+                2:'Wednesday',
+                3:'Thursday',
+                4:'Friday',
+                5:'Saturday',
+                6:'Sunday'
+                }
+        
+        future_weekday_num = future_gametime.weekday() - 1 # number is off by 1 for some reason
+        future_weekday = weekdays[future_weekday_num]
+        
+        days_from_now = counter - 2
+        if days_from_now == 1:
+            final_days_from_now = "tomorrow (" + str(future_weekday) + ")"
+        else:
+            final_days_from_now = str(days_from_now) + " days from today (" + str(future_weekday) + ", " + str(month) + "/" + str(day-1) + ")"
+        
+        print(f"""    The next {team_abbr} game is {future_connector} {future_opponent['shortName']}. This game is {final_days_from_now} and it starts at {future_gametime_short} EST
+    ---""")
+    
+    else:
+        
+        ### Save shortened versions of each team name. E.g. "Philadelphia 76ers" becomes "76ers"
+        focus_team_fullname = focus_team['fullName']
+        focus_team_list = focus_team_fullname.split(" ")
+        focus_team_shortname = focus_team_list[-1]
+        
+        opponent_fullname = opponent['fullName']
+        opponent_list = opponent_fullname.split(" ")
+        opponent_shortname = opponent_list[-1]
+        
+        #####
+        # If there is a game but it hasn't started yet...
+        #####
+        
+        if focus_game['statusGame'] == "Scheduled":
+            raw_start_time = focus_game['startTimeUTC']
+            date = raw_start_time[:10]
+            time = raw_start_time[11:16]
+            year, month, day = map(int, date.split('-'))
+            hour, minute = map(int, time.split(':')) 
+            gametime_unconverted = datetime(year, month, day, hour, minute, 0, 0)
+            gametime = (gametime_unconverted + timedelta(hours=7))
+                    
+            gametime_str = str(gametime)
+            gametime_short = str(gametime_str[11:])
+            
+            if home_game == True:
+                linker = "vs"
+            elif home_game == False:
+                linker = "@"
+                
+            print(f"""
+    ---
+    The {focus_team_shortname} have a game tonight ({linker} {opponent['shortName']}), but it hasn't started yet. Check back after {gametime_short} EST 
+    ---""")
+            
+        #####
+        # If the game has started...
+        #####    
+            
+        elif focus_game['statusGame'] == "In Play":
+            
+            ### Establish the clock and quarter
+            if not focus_game['clock']:
+                clock = "none"
+            else:
+                clock = focus_game['clock']
+        
+            quarter = focus_game['currentPeriod']
+            
+            ### Calculate the point differential
+            focus_team_score_dict = focus_team['score']  
+            focus_team_score = int(focus_team_score_dict['points'])
+            opponent_score_dict = opponent['score']
+            opponent_score = int(opponent_score_dict['points'])
+            point_dif = focus_team_score - opponent_score
+            
+            ### Calculate the stress level
+            wild_card = rd.randint(1, 7)    
+            
+            if point_dif >= 20:
+                stress_level = "Very Low"
+            elif 4 >= point_dif >= -4 and quarter == "4/4" and int(clock[0]) < 2:
+                stress_level = "High, but it's a close game in the final 2 minutes"
+            elif 20 > point_dif >= 10:
+                    stress_level = "Low"
+            elif 10 > point_dif >= 0:
+                if wild_card > 3:
+                    stress_level = "Moderate"
+                elif wild_card < 3:
+                    stress_level = "Low"
+                else:
+                    stress_level = "High"
+            elif 0 > point_dif >= -10:
+                if wild_card > 3:
+                    stress_level = "Moderate"
+                elif wild_card < 3:
+                    stress_level = "High"
+                else:
+                    stress_level = "Low"
+            else:
+                if wild_card == 7:
+                    stress_level = "Moderate"
+                else:
+                    stress_level = "High"
+                    
+            ### Print out what is happening
+            
+            if home_game == True:
+                linker = "vs"
+            elif home_game == False:
+                linker = "@"
+            
+            # This part prints no matter what
+            print(f"""
+    ---
+    {focus_team_shortname} {linker} {opponent_shortname}""")
+            
+            # This part prints if it's halftime
+            if clock == "none" and quarter == "2/4":
+                print(f"""    This game is currently at halftime""")
+             
+            # If it's not halftime, this part prints the time remaining     
+            else:
+                print(f"""    Time remaining: {clock} in Q {quarter}""")
+            
+            print("    ---")
+            
+            # This next chunk either prints the score or the stress level
+            if show_score == False:
+                print(f"    Stress Level: {stress_level}")
+                print(f"    ---")
+                
+            else:
+                if point_dif > 0:
+                    print(f"    The {focus_team_shortname} are winning {focus_team_score} to {opponent_score}")
+                elif point_dif < 0:
+                    print(f"    The {focus_team_shortname} are losing {focus_team_score} to {opponent_score}")
+                else:
+                    print(f"    The game is tied")
+                print("    ---")
+                
+        #####
+        # If the game has finished...
+        #####    
+            
+        elif focus_game['statusGame'] == "Finished":
+            focus_team_score_dict = focus_team['score']  
+            focus_team_score = int(focus_team_score_dict['points'])
+            opponent_score_dict = opponent['score']
+            opponent_score = int(opponent_score_dict['points'])
+            point_dif = focus_team_score - opponent_score
+            
+            print(f"""
+    ---""")
+            
+            if point_dif > 0:
+                print(f"    The {focus_team_shortname} beat the {opponent_shortname}, {focus_team_score} to {opponent_score}")
+            elif point_dif < 0:
+                print(f"    The {focus_team_shortname} lost to the {opponent_shortname}, {focus_team_score} to {opponent_score}")
+            print("    ---")
+        
+        else:
+            statusgame = focus_game['statusGame']
+            print(f"""
+    ---
+    We've encountered an unexpected game status. The current status of the game is listed as {statusgame}.
+    Please check again later.
+    ---""")            
+           
+############################################################################### GUI:
+
+window = sg.Window('Score Checker', layout)
+
+while True:
+    event, value = window.read()
+    if event is None:
+        break
+    
+    elif event == ' Check Team Stress Level ':
+        request_score = False
+        if len(value[0]) == 0:
+            print(f'''
+    ---                  
+    Please select a team and try again            
+    ---           ''')    
+        else:        
+            team_abbr_spaces = value[0]
+            team_abbr = team_abbr_spaces.strip()
+            
+            if team_abbr not in list_of_teams:
+                print(f'''
+    ---
+    "{team_abbr}" is not a valid team name. Please select a team from the dropdown menu and try again.
+    ---''')
+            else:
+                check_single_game(team_abbr, request_score)
+            
+    elif event == ' Check Team Score ':
+        request_score = True
+        if len(value[0]) == 0:
+            print(f'''
+    ---                  
+    Please select a team and try again            
+    ---           ''')
+        else:        
+            team_abbr_spaces = value[0]
+            team_abbr = team_abbr_spaces.strip()
+            
+            if team_abbr not in list_of_teams:
+                print(f'''
+    ---
+    "{team_abbr}" is not a valid team name. Please select a team from the dropdown menu and try again.
+    ---''')
+            else:
+                check_single_game(team_abbr, request_score)
+            
+    elif event == ' Check All Current Scores ':
+        check_all_games()
+
+window.close()
